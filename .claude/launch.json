@@ -1,0 +1,18 @@
+{
+  "servers": [
+    {
+      "name": "Frontend (Vite)",
+      "cwd": "WifiManagementApp",
+      "command": "npm run dev",
+      "port": 5173,
+      "url": "http://localhost:5173"
+    },
+    {
+      "name": "Backend (Express)",
+      "cwd": "WifiManagementApp/server",
+      "command": "npm run dev",
+      "port": 3001,
+      "url": "http://localhost:3001"
+    }
+  ]
+}

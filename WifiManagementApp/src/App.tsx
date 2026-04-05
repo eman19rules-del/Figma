@@ -6,10 +6,12 @@ import GuestNetwork from './pages/GuestNetwork'
 import ParentalControls from './pages/ParentalControls'
 import Security from './pages/Security'
 import Settings from './pages/Settings'
+import { RouterDataContext, useRouterData } from './hooks/useRouterData'
 
-function App() {
+function AppWithData() {
+  const routerData = useRouterData()
   return (
-    <BrowserRouter>
+    <RouterDataContext.Provider value={routerData}>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -21,6 +23,14 @@ function App() {
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
+    </RouterDataContext.Provider>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppWithData />
     </BrowserRouter>
   )
 }

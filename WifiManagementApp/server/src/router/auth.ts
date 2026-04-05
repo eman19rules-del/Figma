@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import md5 from 'md5';
-import { getPage, postPage } from './client';
+import { getPage, postPage, postPageRaw, initSession } from './client';
 
 let isAuthenticated = false;
 let authError: string | null = null;
@@ -54,9 +54,18 @@ function parseNonce(html: string): string | null {
  */
 export async function login(deviceAccessCode: string): Promise<{ success: boolean; message: string }> {
   try {
-    // Step 1: GET the login page to extract nonce
-    const loginHtml = await getPage('login.ha');
-    const nonce = parseNonce(loginHtml);
+    // Step 1: Establish session cookie — first GET returns "cookies required", sets SessionID.
+    // Retry once if the second GET doesn't return a nonce (session may not have been set yet).
+    await initSession();
+    let loginHtml = await getPage('login.ha');
+    let nonce = parseNonce(loginHtml);
+
+    if (!nonce) {
+      // Retry: establish a fresh session and try again
+      await initSession();
+      loginHtml = await getPage('login.ha');
+      nonce = parseNonce(loginHtml);
+    }
 
     if (!nonce) {
       isAuthenticated = false;
@@ -71,33 +80,23 @@ export async function login(deviceAccessCode: string): Promise<{ success: boolea
     // password field is typically sent as asterisks matching length
     const passwordMasked = '*'.repeat(deviceAccessCode.length);
 
-    const responseHtml = await postPage('login.ha', {
+    const { status, location } = await postPageRaw('login.ha', {
       nonce,
       password: passwordMasked,
       hashpassword,
       Continue: 'Continue',
     });
 
-    // Check for success — typically redirects away from login page or shows a success indicator
-    const $ = cheerio.load(responseHtml);
-    const title = $('title').text().toLowerCase();
-    const body = responseHtml.toLowerCase();
-
-    // If we're still on the login page with an error, auth failed
-    if (
-      body.includes('invalid') ||
-      body.includes('incorrect') ||
-      body.includes('failed') ||
-      (body.includes('login') && body.includes('password') && !body.includes('logout'))
-    ) {
-      isAuthenticated = false;
-      authError = 'Authentication failed — invalid access code';
-      return { success: false, message: authError };
+    // Success = 302 redirect away from login.ha (typically to home.ha)
+    if (status === 302 && location && !location.includes('login.ha')) {
+      isAuthenticated = true;
+      authError = null;
+      return { success: true, message: 'Authentication successful' };
     }
 
-    isAuthenticated = true;
-    authError = null;
-    return { success: true, message: 'Authentication successful' };
+    isAuthenticated = false;
+    authError = 'Authentication failed — invalid access code';
+    return { success: false, message: authError };
   } catch (err: unknown) {
     isAuthenticated = false;
     const message = err instanceof Error ? err.message : String(err);

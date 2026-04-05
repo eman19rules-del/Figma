@@ -11,88 +11,110 @@ export interface DeviceEntry {
 }
 
 /**
- * Parse devices.ha HTML into a list of connected devices.
- * The page contains a table with columns:
- * Device Name | IPv4 Address | IPv6 Address | MAC Address | Connection Type
+ * Parse band from connection type string like:
+ *   "Wi-Fi 5 GHz Radio-1 Type: Home Name: ATTTXp6ey5"
+ *   "Wi-Fi 2.4 GHz Radio-1 Type: Home Name: ATT..."
+ *   "Wired"
+ */
+function parseBand(connectionType: string | null): string | null {
+  if (!connectionType) return null;
+  const ct = connectionType.toLowerCase();
+  if (ct.includes('5 ghz') || ct.includes('5ghz')) return '5GHz';
+  if (ct.includes('2.4 ghz') || ct.includes('2.4ghz')) return '2.4GHz';
+  if (ct.includes('6 ghz') || ct.includes('6ghz')) return '6GHz';
+  if (ct.includes('wired') || ct.includes('ethernet')) return 'Wired';
+  if (ct.includes('wi-fi') || ct.includes('wifi')) return 'WiFi';
+  return null;
+}
+
+/**
+ * Parse devicelist.ha or devices.ha HTML.
+ *
+ * The BGW320 renders each device as a block of <th>Label</th><td>Value</td> rows
+ * inside a single big table, with <tr><td><hr></td></tr> rows separating devices.
+ *
+ * Online devices have an "IPv4 Address / Name" key (value: "192.168.1.x / hostname")
+ * instead of separate Name and IPv4 fields.
+ * Offline devices have a "Name" key and no IP.
+ * Status is in a "Status" row with value "on" or "off".
  */
 export function parseDevices(html: string): DeviceEntry[] {
   try {
     const $ = cheerio.load(html);
     const devices: DeviceEntry[] = [];
 
-    // Find all tables and look for one with device-like columns
-    $('table').each((_, table) => {
-      const headers: string[] = [];
-      $(table)
-        .find('tr')
-        .first()
-        .find('th, td')
-        .each((_, cell) => {
-          headers.push($(cell).text().trim().toLowerCase());
-        });
+    // Collect all rows from the page's tables into a flat list
+    // We'll split them into device blocks on <hr> rows
+    interface Row { label: string; value: string }
+    const allRows: (Row | 'separator')[] = [];
 
-      // Check if this looks like the devices table
-      const hasDeviceCols =
-        headers.some((h) => h.includes('device') || h.includes('name')) &&
-        headers.some((h) => h.includes('mac'));
+    $('table tr').each((_, tr) => {
+      const th = $(tr).find('th').first();
+      const td = $(tr).find('td').first();
 
-      if (!hasDeviceCols) return;
+      // Check if this is a separator row (<td><hr></td>)
+      if (td.find('hr').length > 0 && th.length === 0) {
+        allRows.push('separator');
+        return;
+      }
 
-      // Map column indices
-      const nameIdx = headers.findIndex((h) => h.includes('name') || h.includes('device'));
-      const ipv4Idx = headers.findIndex((h) => h.includes('ipv4') || (h.includes('ip') && !h.includes('ipv6')));
-      const ipv6Idx = headers.findIndex((h) => h.includes('ipv6'));
-      const macIdx = headers.findIndex((h) => h.includes('mac'));
-      const connIdx = headers.findIndex(
-        (h) => h.includes('connection') || h.includes('type') || h.includes('interface')
-      );
+      const label = th.text().trim().toLowerCase();
+      const value = td.text().replace(/\s+/g, ' ').trim();
 
-      // Parse data rows (skip header row)
-      $(table)
-        .find('tr')
-        .slice(1)
-        .each((_, row) => {
-          const cells = $(row).find('td');
-          if (cells.length === 0) return;
-
-          const getCellText = (idx: number): string | null => {
-            if (idx < 0 || idx >= cells.length) return null;
-            const text = $(cells[idx]).text().trim();
-            return text || null;
-          };
-
-          const connectionType = getCellText(connIdx);
-          let band: string | null = null;
-
-          if (connectionType) {
-            const ct = connectionType.toLowerCase();
-            if (ct.includes('5') || ct.includes('5ghz') || ct.includes('5 ghz')) {
-              band = '5GHz';
-            } else if (ct.includes('2.4') || ct.includes('2.4ghz') || ct.includes('2.4 ghz')) {
-              band = '2.4GHz';
-            } else if (ct.includes('6') || ct.includes('6ghz') || ct.includes('6 ghz')) {
-              band = '6GHz';
-            } else if (ct.toLowerCase().includes('wired') || ct.toLowerCase().includes('ethernet')) {
-              band = 'Wired';
-            } else if (ct.toLowerCase().includes('wifi') || ct.toLowerCase().includes('wi-fi')) {
-              band = 'WiFi';
-            }
-          }
-
-          const mac = getCellText(macIdx);
-          if (!mac) return; // Skip rows without a MAC
-
-          devices.push({
-            name: getCellText(nameIdx),
-            ipv4: getCellText(ipv4Idx),
-            ipv6: getCellText(ipv6Idx),
-            mac,
-            connectionType,
-            band,
-            online: true, // All devices shown on this page are currently connected
-          });
-        });
+      if (label) {
+        allRows.push({ label, value });
+      }
     });
+
+    // Split into device blocks by separator
+    const blocks: Row[][] = [];
+    let current: Row[] = [];
+    for (const row of allRows) {
+      if (row === 'separator') {
+        if (current.length > 0) blocks.push(current);
+        current = [];
+      } else {
+        current.push(row);
+      }
+    }
+    if (current.length > 0) blocks.push(current);
+
+    for (const block of blocks) {
+      if (block.length === 0) continue;
+
+      const get = (partial: string): string | null => {
+        const found = block.find((r) => r.label.includes(partial));
+        return found ? found.value || null : null;
+      };
+
+      const mac = get('mac address') ?? get('mac');
+      if (!mac) continue; // Skip blocks without a MAC address
+
+      // Online devices: "IPv4 Address / Name" => "192.168.1.x / hostname"
+      const ipv4NameField = get('ipv4 address / name');
+      let name: string | null = null;
+      let ipv4: string | null = null;
+
+      if (ipv4NameField) {
+        const parts = ipv4NameField.split('/');
+        ipv4 = parts[0]?.trim() || null;
+        name = parts[1]?.trim() || null;
+      } else {
+        name = get('name');
+        ipv4 = get('ipv4 address') ?? get('ip address');
+      }
+
+      const statusVal = get('status');
+      const online = statusVal ? statusVal.toLowerCase() === 'on' : ipv4 !== null;
+
+      // Connection type may be in a <pre> tag — cheerio .text() still gets the text
+      const connectionType = get('connection type');
+      const band = parseBand(connectionType);
+
+      const ipv6 = get('ipv6 address') ?? get('ipv6');
+
+      devices.push({ name, ipv4, ipv6, mac, connectionType, band, online });
+    }
 
     return devices;
   } catch {

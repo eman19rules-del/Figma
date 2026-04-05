@@ -13,6 +13,7 @@ import {
   UserCheck,
   Router,
 } from 'lucide-react'
+import { useRouterContext } from '../hooks/useRouterData'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -36,6 +37,8 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
   const pageTitle = pageTitles[location.pathname] || 'Dashboard'
+  const { devices, sysinfo, online } = useRouterContext()
+  const onlineCount = devices.filter((d) => d.online).length
 
   return (
     <div className="flex h-screen bg-[#0f0f1a] overflow-hidden">
@@ -78,10 +81,10 @@ export default function Layout() {
             <Router className="w-4 h-4 text-[#00d4aa]" />
             <div>
               <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#00d4aa] animate-pulse" />
-                <span className="text-xs font-medium text-[#00d4aa]">Router Online</span>
+                <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-[#00d4aa] animate-pulse' : 'bg-red-400'}`} />
+                <span className="text-xs font-medium text-[#00d4aa]">{online ? 'Router Online' : 'Router Offline'}</span>
               </div>
-              <div className="text-[10px] text-[#94a3b8] mt-0.5">ASUS RT-AX88U Pro</div>
+              <div className="text-[10px] text-[#94a3b8] mt-0.5">{sysinfo?.model ?? 'Loading...'}</div>
             </div>
           </div>
         </div>
@@ -109,7 +112,7 @@ export default function Layout() {
 
         {/* Footer */}
         <div className="p-4 border-t border-[#2a2a3e]">
-          <div className="text-xs text-[#94a3b8] text-center">v3.0.0.4 · ASUS RT-AX88U Pro</div>
+          <div className="text-xs text-[#94a3b8] text-center">{sysinfo ? `v${sysinfo.firmware} · ${sysinfo.model}` : 'Loading...'}</div>
         </div>
       </aside>
 
@@ -136,7 +139,7 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#00d4aa]/10 border border-[#00d4aa]/20">
               <div className="w-2 h-2 rounded-full bg-[#00d4aa] animate-pulse" />
-              <span className="text-xs font-medium text-[#00d4aa]">10 devices online</span>
+              <span className="text-xs font-medium text-[#00d4aa]">{onlineCount} devices online</span>
             </div>
             <button className="p-2 rounded-xl hover:bg-[#252535] text-[#94a3b8] hover:text-white transition-colors relative">
               <Bell className="w-5 h-5" />

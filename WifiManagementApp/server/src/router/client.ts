@@ -23,13 +23,48 @@ export const routerClient: AxiosInstance = wrapper(
 );
 
 /**
- * Perform a GET request to a router .ha page
+ * Hit the router root to establish a SessionID cookie before login
  */
-export async function getPage(page: string): Promise<string> {
+export async function initSession(): Promise<void> {
+  // First GET to login.ha sets the SessionID cookie; the response itself has no nonce.
+  await routerClient.get('/login.ha', { timeout: 5000, responseType: 'text' }).catch(() => {});
+}
+
+/**
+ * Perform a GET request to a router .ha page
+ * @param timeoutMs Optional per-request timeout override (default: 10000ms)
+ */
+export async function getPage(page: string, timeoutMs?: number): Promise<string> {
   const response = await routerClient.get(`/${page}`, {
     responseType: 'text',
+    ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
   });
   return response.data as string;
+}
+
+/**
+ * POST without following redirects — returns { status, location }
+ * Used for login where a 302 to home.ha signals success.
+ */
+export async function postPageRaw(
+  page: string,
+  fields: Record<string, string>
+): Promise<{ status: number; location: string | null; body: string }> {
+  const params = new URLSearchParams(fields);
+  const response = await routerClient.post(`/${page}`, params.toString(), {
+    responseType: 'text',
+    maxRedirects: 0,
+    validateStatus: (s) => s < 400,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Referer: `http://${ROUTER_IP}/cgi-bin/${page}`,
+    },
+  });
+  return {
+    status: response.status,
+    location: (response.headers['location'] as string) ?? null,
+    body: response.data as string,
+  };
 }
 
 /**

@@ -196,8 +196,9 @@ async function pollOnce(): Promise<void> {
 
   try {
     // Fetch all pages concurrently
+    // devices.ha can take ~25s on this router, so give it 35s
     const [devHtml, bbHtml, syHtml, fibHtml, ipHtml, lanHtml] = await Promise.allSettled([
-      getPage('devices.ha'),
+      getPage('devices.ha', 35000),
       getPage('broadbandstatistics.ha'),
       getPage('sysinfo.ha'),
       getPage('fiberstat.ha'),

@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import type { Element } from 'domhandler';
 
 export interface BroadbandStats {
   lineState: string | null;
@@ -27,7 +28,7 @@ function parseNum(val: string | null | undefined): number | null {
 /**
  * Build a lookup map from row label -> cell value from a table
  */
-function buildTableMap($: cheerio.CheerioAPI, table: cheerio.Element): Map<string, string> {
+function buildTableMap($: cheerio.CheerioAPI, table: Element): Map<string, string> {
   const map = new Map<string, string>();
   $(table)
     .find('tr')
