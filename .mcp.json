@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "figma-browser-mcp": {
+      "command": "/opt/homebrew/Cellar/node/25.6.1_1/bin/node",
+      "args": ["/Users/elismith/Projects/Figma/figma-browser-mcp/dist/index.js"]
+    }
+  }
+}
