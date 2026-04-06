@@ -60,10 +60,20 @@ export interface DevicesResponse {
   devices: RouterDevice[]
 }
 
+export type TimeRange = '1h' | '6h' | '24h' | '7d'
+
+export interface BandwidthHistoryResponse {
+  history: BandwidthSample[]
+  count: number
+  range: string
+  source: 'db' | 'memory'
+}
+
 export const api = {
   devices: () => get<DevicesResponse>('/devices'),
   broadband: () => get<BroadbandData>('/broadband'),
   sysinfo: () => get<SysInfo>('/sysinfo'),
-  bandwidthHistory: () => get<{ history: BandwidthSample[]; count: number }>('/bandwidth-history'),
-  status: () => get<{ online: boolean; lastPollTime: number | null }>('/status'),
+  bandwidthHistory: (range: TimeRange = '1h') =>
+    get<BandwidthHistoryResponse>(`/bandwidth-history?range=${range}`),
+  status: () => get<{ online: boolean; lastPollTime: number | null; daemonConnected: boolean }>('/status'),
 }
